@@ -1,0 +1,4 @@
+pillow
+customtkinter
+pyqt5          # si usas Qt; si no, bórralo
+python-dotenv
