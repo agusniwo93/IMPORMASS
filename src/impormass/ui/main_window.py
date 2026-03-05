@@ -1,10 +1,12 @@
 # src/impormass/ui/main_window.py
 import tkinter as tk
 from tkinter import messagebox
-from PIL import Image, ImageTk, Image  # asegúrate de importar Image
+from PIL import Image, ImageTk
 from ..config import ASSETS
 from .productos import vista_registro, vista_consulta
 from .facturas import ventana_facturas_registro
+from .clientes import vista_clientes
+from .ver_facturas import vista_ver_facturas
 
 
 class MainApp(tk.Tk):
@@ -34,15 +36,12 @@ class MainApp(tk.Tk):
     # ------------------------------------------------------
     def _clear(self):
         """Limpia el contenedor y elimina binds para evitar callbacks a widgets destruidos."""
-        # 1) Desenlaza cualquier callback previo de <Configure>
         try:
             self.frame_contenido.unbind("<Configure>")
         except Exception:
             pass
-        # 2) Destruye hijos
         for w in self.frame_contenido.winfo_children():
             w.destroy()
-        # 3) Limpia referencias del logo
         self._logo_label = None
         self._logo_orig = None
 
@@ -51,11 +50,9 @@ class MainApp(tk.Tk):
         lbl = self._logo_label
         if not (self._logo_orig and lbl):
             return
-        # El label puede haber sido destruido por un cambio de vista
         if not lbl.winfo_exists():
             return
 
-        # Espacio disponible dentro del contenedor
         ancho_max = max(min(700, self.frame_contenido.winfo_width() - 80), 50)
         alto_max  = max(min(300, self.frame_contenido.winfo_height() - 300), 50)
         if ancho_max <= 0 or alto_max <= 0:
@@ -63,11 +60,10 @@ class MainApp(tk.Tk):
 
         a0, b0 = self._logo_orig.size
         prop = min(ancho_max / a0, alto_max / b0, 1.0)
-        # usa LANCZOS para mejor calidad
         img = self._logo_orig.resize((int(a0 * prop), int(b0 * prop)), Image.LANCZOS)
         pimg = ImageTk.PhotoImage(img)
         lbl.configure(image=pimg)
-        lbl.image = pimg  # evita GC
+        lbl.image = pimg
 
     # ------------------------------------------------------
     # Vistas
@@ -77,11 +73,11 @@ class MainApp(tk.Tk):
 
         cont = tk.Frame(self.frame_contenido, bg="#f8f8f8")
         cont.grid(row=0, column=0, sticky="nsew", padx=16, pady=16)
-        cont.rowconfigure(0, weight=0)  # logo
-        cont.rowconfigure(1, weight=1)  # botones
+        cont.rowconfigure(0, weight=0)
+        cont.rowconfigure(1, weight=1)
         cont.columnconfigure(0, weight=1)
 
-        # Logo (fila 0)
+        # Logo
         logo_wrap = tk.Frame(cont, bg="#f8f8f8")
         logo_wrap.grid(row=0, column=0, sticky="n", pady=(10, 24))
 
@@ -90,10 +86,8 @@ class MainApp(tk.Tk):
             self._logo_label = tk.Label(logo_wrap, bg="#f8f8f8")
             self._logo_label.grid(row=0, column=0)
 
-            # Primero desenlaza por si venimos de otra vista, luego enlaza de nuevo
             self.frame_contenido.unbind("<Configure>")
             self.frame_contenido.bind("<Configure>", self._resize_logo)
-            # Pintado inicial leve delay
             self.after(150, self._resize_logo)
         except Exception:
             tk.Label(
@@ -104,7 +98,7 @@ class MainApp(tk.Tk):
                 fg="#007acc",
             ).grid(row=0, column=0)
 
-        # Columna de botones (fila 1)
+        # Botones
         btns = tk.Frame(cont, bg="#f8f8f8")
         btns.grid(row=1, column=0, sticky="n", pady=(0, 8))
         btns.columnconfigure(0, weight=1)
@@ -112,8 +106,10 @@ class MainApp(tk.Tk):
         opciones = [
             ("📟 Crear Factura", lambda: (self._clear(),
                                          ventana_facturas_registro(self.frame_contenido, self.menu_principal))),
-            ("📂 Ver Facturas", lambda: messagebox.showinfo("Ver Facturas", "Próximamente")),
-            ("👥 Clientes",     lambda: messagebox.showinfo("Clientes", "Próximamente")),
+            ("📂 Ver Facturas", lambda: (self._clear(),
+                                         vista_ver_facturas(self.frame_contenido, self.menu_principal))),
+            ("👥 Clientes",     lambda: (self._clear(),
+                                         vista_clientes(self.frame_contenido, self.menu_principal))),
             ("📦 Productos",    self.menu_productos),
             ("⚙ Configuración", lambda: messagebox.showinfo("Configuración", "Próximamente")),
         ]
@@ -131,8 +127,8 @@ class MainApp(tk.Tk):
 
         cont = tk.Frame(self.frame_contenido, bg="#f8f8f8")
         cont.grid(row=0, column=0, sticky="nsew", padx=16, pady=16)
-        cont.rowconfigure(0, weight=0)  # título
-        cont.rowconfigure(1, weight=1)  # botones
+        cont.rowconfigure(0, weight=0)
+        cont.rowconfigure(1, weight=1)
         cont.columnconfigure(0, weight=1)
 
         tk.Label(

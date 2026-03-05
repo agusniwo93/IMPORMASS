@@ -16,7 +16,12 @@ def _ventana_registro(root):
     e_p = tk.Entry(win, show="*"); e_p.grid(row=1, column=1, padx=8, pady=6, sticky="ew")
 
     def registrar():
-        if auth.registrar(e_u.get(), e_p.get()):
+        u, p = e_u.get().strip(), e_p.get().strip()
+        if not u or not p:
+            messagebox.showwarning("Campos vacíos", "Ingresa usuario y contraseña."); return
+        if len(p) < 4:
+            messagebox.showwarning("Contraseña corta", "La contraseña debe tener al menos 4 caracteres."); return
+        if auth.registrar(u, p):
             messagebox.showinfo("OK", "Usuario creado"); win.destroy()
         else:
             messagebox.showerror("Error", "Usuario ya existe")
@@ -36,7 +41,10 @@ def run_login():
     e_p = tk.Entry(root, show="*"); e_p.grid(row=1, column=1, padx=10, pady=8, sticky="ew")
 
     def entrar():
-        if auth.validar(e_u.get(), e_p.get()):
+        u, p = e_u.get().strip(), e_p.get().strip()
+        if not u or not p:
+            messagebox.showwarning("Campos vacíos", "Ingresa usuario y contraseña."); return
+        if auth.validar(u, p):
             root.destroy()
             MainApp().mainloop()
         else:

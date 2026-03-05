@@ -159,18 +159,21 @@ def vista_registro(frame, volver_funcion):
             svc.eliminar(codigo); cargar(); messagebox.showinfo("OK", "Eliminado.")
 
     def actualizar():
-        codigo = _sel_to_inputs()
+        codigo = e_codigo.get().strip()
         if not codigo:
-            messagebox.showwarning("Selección", "Elige un producto para editar."); return
+            messagebox.showwarning("Selección", "Primero carga un producto para editar."); return
+        nombre = e_nombre.get().strip()
+        precio_s = e_precio.get().strip()
+        cant_s = e_cant.get().strip()
+        desc = e_desc.get("1.0", tk.END).strip()
+        if not (nombre and precio_s and cant_s):
+            messagebox.showwarning("Campos", "Nombre, precio y cantidad son obligatorios."); return
         try:
-            precio = float(e_precio.get()); cant = int(e_cant.get())
+            precio = float(precio_s); cant = int(cant_s)
         except ValueError:
             messagebox.showwarning("Valor", "Precio y cantidad deben ser números."); return
-        svc.actualizar(codigo=codigo,
-                       nombre=e_nombre.get().strip(),
-                       precio=precio,
-                       cantidad=cant,
-                       descripcion=e_desc.get("1.0", tk.END).strip())
+        svc.actualizar(codigo=codigo, nombre=nombre, precio=precio,
+                       cantidad=cant, descripcion=desc)
         _clean(); cargar(); messagebox.showinfo("OK", "Actualizado.")
 
     # Botoneras

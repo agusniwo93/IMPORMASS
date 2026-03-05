@@ -3,6 +3,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import date
 from ..utils.ui_helpers import auto_resize_treeview
+from ..services import cliente_service as cli_svc
+from ..services import producto_service as prod_svc
+from ..services import factura_service as fac_svc
 
 FUENTE = ("Segoe UI", 10)
 FUENTE_LBL = ("Segoe UI", 10)
@@ -12,15 +15,15 @@ AFECTACIONES = ["Gravado", "Exonerado", "Inafecto"]
 UNIDADES = ["UNIDAD", "UND", "MTR", "KG", "LT", "HORA", "SERV"]
 
 def ventana_facturas_registro(frame_contenedor, volver_cb):
-    # limpiar y preparar contenedor elástico
     for w in frame_contenedor.winfo_children(): w.destroy()
-    frame_contenedor.rowconfigure(1, weight=1)   # cuerpo crece
+    frame_contenedor.rowconfigure(1, weight=1)
     frame_contenedor.columnconfigure(0, weight=1)
 
     root = frame_contenedor.winfo_toplevel()
+    cliente_actual = [None]  # [id] del cliente seleccionado
 
     # ======= CABECERA =======
-    cabecera = tk.LabelFrame(frame_contenedor, text="", bg=BG, padx=10, pady=10)
+    cabecera = tk.LabelFrame(frame_contenedor, text="Datos del Comprobante", bg=BG, padx=10, pady=10)
     cabecera.grid(row=0, column=0, sticky="ew", padx=12, pady=(10,8))
     cabecera.columnconfigure(1, weight=1)
     cabecera.columnconfigure(3, weight=0)
@@ -30,17 +33,64 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
     ent_ruc = tk.Entry(cabecera, font=FUENTE, width=28)
     ent_ruc.grid(row=0, column=1, sticky="w", pady=3)
 
-    def simular_busqueda_sunat():
+    def buscar_cliente():
         r = ent_ruc.get().strip()
         if not r:
-            messagebox.showwarning("RUC requerido", "Ingresa el RUC / DNI."); return
-        ent_razon.config(state="normal"); ent_dir.config(state="normal")
-        ent_razon.delete(0,"end"); ent_dir.delete(0,"end")
-        ent_razon.insert(0, f"RAZÓN SOCIAL DEMO {r}")
-        ent_dir.insert(0, "AV. DEMO 123 - HUANCAYO")
-        ent_razon.config(state="readonly"); ent_dir.config(state="readonly")
+            messagebox.showwarning("Documento requerido", "Ingresa el RUC / DNI."); return
+        cl = cli_svc.buscar_por_documento(r)
+        if cl:
+            cliente_actual[0] = cl[0]  # id
+            ent_razon.config(state="normal"); ent_dir.config(state="normal")
+            ent_razon.delete(0,"end"); ent_dir.delete(0,"end")
+            ent_razon.insert(0, cl[3])  # razon_social
+            ent_dir.insert(0, cl[4] or "")  # direccion
+            ent_razon.config(state="readonly"); ent_dir.config(state="readonly")
+        else:
+            if messagebox.askyesno("Cliente no encontrado",
+                                   f"No se encontró el documento {r}.\n¿Desea registrarlo ahora?"):
+                _registrar_cliente_rapido(r)
 
-    tk.Button(cabecera, text="Registrar", font=FUENTE, command=simular_busqueda_sunat)\
+    def _registrar_cliente_rapido(num_doc):
+        win = tk.Toplevel(root)
+        win.title("Registrar Cliente Rápido")
+        win.transient(root); win.grab_set(); win.configure(bg=BG)
+        pad = dict(padx=6, pady=4)
+
+        tk.Label(win, text="Tipo Doc.", bg=BG).grid(row=0, column=0, sticky="e", **pad)
+        cb_t = ttk.Combobox(win, values=["RUC", "DNI", "CE"], state="readonly", width=8)
+        cb_t.set("RUC" if len(num_doc) == 11 else "DNI")
+        cb_t.grid(row=0, column=1, sticky="w", **pad)
+
+        tk.Label(win, text="Nro. Documento", bg=BG).grid(row=1, column=0, sticky="e", **pad)
+        e_nd = tk.Entry(win, width=20); e_nd.insert(0, num_doc)
+        e_nd.grid(row=1, column=1, sticky="w", **pad)
+
+        tk.Label(win, text="Razón Social", bg=BG).grid(row=2, column=0, sticky="e", **pad)
+        e_rs = tk.Entry(win, width=40); e_rs.grid(row=2, column=1, sticky="ew", **pad)
+
+        tk.Label(win, text="Dirección", bg=BG).grid(row=3, column=0, sticky="e", **pad)
+        e_dir2 = tk.Entry(win, width=40); e_dir2.grid(row=3, column=1, sticky="ew", **pad)
+
+        def guardar_cli():
+            rs = e_rs.get().strip()
+            nd = e_nd.get().strip()
+            if not rs or not nd:
+                messagebox.showwarning("Campos", "Razón social y documento son obligatorios."); return
+            try:
+                cid = cli_svc.crear(cb_t.get(), nd, rs, e_dir2.get().strip())
+                cliente_actual[0] = cid
+                ent_razon.config(state="normal"); ent_dir.config(state="normal")
+                ent_razon.delete(0,"end"); ent_dir.delete(0,"end")
+                ent_razon.insert(0, rs)
+                ent_dir.insert(0, e_dir2.get().strip())
+                ent_razon.config(state="readonly"); ent_dir.config(state="readonly")
+                win.destroy()
+            except Exception:
+                messagebox.showerror("Error", "No se pudo registrar. Documento duplicado?")
+
+        tk.Button(win, text="💾 Guardar", command=guardar_cli).grid(row=4, column=1, sticky="e", **pad)
+
+    tk.Button(cabecera, text="Buscar", font=FUENTE, command=buscar_cliente)\
         .grid(row=0, column=2, sticky="w", padx=(8,0))
 
     tk.Label(cabecera, text="Razón Social", font=FUENTE_LBL, bg=BG)\
@@ -90,7 +140,7 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
     tree = ttk.Treeview(tabla_wrap, columns=cols, show="headings")
     for c in cols: tree.heading(c, text=c)
     tree.grid(row=0, column=0, sticky="nsew")
-    auto_resize_treeview(tree, fractions=[0.14,0.10,0.08,0.08,0.10,0.20,0.10,0.08,0.06,0.06,0.06,0.14])
+    auto_resize_treeview(tree, fractions=[0.10,0.08,0.06,0.06,0.08,0.18,0.08,0.08,0.07,0.06,0.06,0.09])
 
     sy = ttk.Scrollbar(tabla_wrap, orient="vertical", command=tree.yview)
     tree.configure(yscroll=sy.set)
@@ -161,69 +211,108 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
         win = tk.Toplevel(root)
         win.title("Editar ítem" if edit else "Adicionar ítem")
         win.transient(root); win.grab_set(); win.configure(bg=BG)
+        win.geometry("560x520")
         pad = dict(padx=6, pady=3)
 
+        # --- Tipo bien/servicio ---
         tipo_var = tk.StringVar(value="Bien")
         tk.Radiobutton(win, text="Bien", variable=tipo_var, value="Bien", bg=BG)\
             .grid(row=0, column=0, sticky="w", **pad)
         tk.Radiobutton(win, text="Servicio", variable=tipo_var, value="Servicio", bg=BG)\
             .grid(row=0, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Cantidad", bg=BG).grid(row=1, column=0, sticky="e", **pad)
+        # --- Buscar producto del inventario ---
+        tk.Label(win, text="Buscar Producto", bg=BG, font=("Segoe UI", 9, "italic"))\
+            .grid(row=1, column=0, sticky="e", **pad)
+        e_buscar_prod = tk.Entry(win, width=30)
+        e_buscar_prod.grid(row=1, column=1, sticky="w", **pad)
+
+        prod_list = tk.Listbox(win, height=4, width=44, font=("Segoe UI", 9))
+        prod_list.grid(row=2, column=1, sticky="w", padx=6, pady=2)
+
+        def filtrar_productos(*_):
+            prod_list.delete(0, tk.END)
+            filtro = e_buscar_prod.get().strip()
+            for p in prod_svc.listar(filtro)[:15]:
+                # p = (codigo, nombre, precio, cantidad, descripcion)
+                prod_list.insert(tk.END, f"{p[0] or '-'} | {p[1]} | S/.{p[2]:.2f} | Stock:{p[3]}")
+
+        e_buscar_prod.bind("<KeyRelease>", filtrar_productos)
+
+        def seleccionar_producto(_e=None):
+            sel = prod_list.curselection()
+            if not sel:
+                return
+            texto = prod_list.get(sel[0])
+            partes = [x.strip() for x in texto.split("|")]
+            codigo = partes[0] if partes[0] != "-" else ""
+            nombre = partes[1]
+            precio = partes[2].replace("S/.", "")
+            e_cod.delete(0, tk.END); e_cod.insert(0, codigo)
+            txt_desc.delete("1.0", tk.END); txt_desc.insert("1.0", nombre)
+            e_val.delete(0, tk.END); e_val.insert(0, precio)
+            recalcular_item()
+
+        prod_list.bind("<Double-1>", seleccionar_producto)
+        tk.Button(win, text="Seleccionar", font=("Segoe UI", 8),
+                  command=seleccionar_producto)\
+            .grid(row=2, column=0, sticky="e", padx=6)
+
+        # --- Campos del ítem ---
+        tk.Label(win, text="Cantidad", bg=BG).grid(row=3, column=0, sticky="e", **pad)
         e_cant = tk.Entry(win, width=14); e_cant.insert(0, "1")
-        e_cant.grid(row=1, column=1, sticky="w", **pad)
+        e_cant.grid(row=3, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Unidad de Medida", bg=BG).grid(row=2, column=0, sticky="e", **pad)
+        tk.Label(win, text="Unidad de Medida", bg=BG).grid(row=4, column=0, sticky="e", **pad)
         cb_un = ttk.Combobox(win, values=UNIDADES, state="readonly", width=20)
-        cb_un.set("UNIDAD"); cb_un.grid(row=2, column=1, sticky="w", **pad)
+        cb_un.set("UNIDAD"); cb_un.grid(row=4, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Código", bg=BG).grid(row=3, column=0, sticky="e", **pad)
-        e_cod = tk.Entry(win, width=30); e_cod.grid(row=3, column=1, sticky="w", **pad)
+        tk.Label(win, text="Código", bg=BG).grid(row=5, column=0, sticky="e", **pad)
+        e_cod = tk.Entry(win, width=30); e_cod.grid(row=5, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Descripción", bg=BG).grid(row=4, column=0, sticky="ne", **pad)
-        txt_desc = tk.Text(win, width=46, height=4); txt_desc.grid(row=4, column=1, sticky="w", **pad)
+        tk.Label(win, text="Descripción", bg=BG).grid(row=6, column=0, sticky="ne", **pad)
+        txt_desc = tk.Text(win, width=46, height=3); txt_desc.grid(row=6, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Impuesto Bolsas Plásticas", bg=BG).grid(row=5, column=0, sticky="e", **pad)
+        tk.Label(win, text="Imp. Bolsas Plásticas", bg=BG).grid(row=7, column=0, sticky="e", **pad)
         icb_si_no = tk.StringVar(value="NO")
-        tk.Radiobutton(win, text="SI", variable=icb_si_no, value="SI", bg=BG).grid(row=5, column=1, sticky="w", **pad)
-        tk.Radiobutton(win, text="NO", variable=icb_si_no, value="NO", bg=BG).grid(row=5, column=1, sticky="e", **pad)
+        f_icb = tk.Frame(win, bg=BG)
+        f_icb.grid(row=7, column=1, sticky="w", **pad)
+        tk.Radiobutton(f_icb, text="SI", variable=icb_si_no, value="SI", bg=BG).pack(side="left")
+        tk.Radiobutton(f_icb, text="NO", variable=icb_si_no, value="NO", bg=BG).pack(side="left", padx=12)
 
-        tk.Label(win, text="Valor Unitario", bg=BG).grid(row=6, column=0, sticky="e", **pad)
+        tk.Label(win, text="Valor Unitario", bg=BG).grid(row=8, column=0, sticky="e", **pad)
         e_val = tk.Entry(win, width=18); e_val.insert(0, "0.00")
-        e_val.grid(row=6, column=1, sticky="w", **pad)
+        e_val.grid(row=8, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Descuento", bg=BG).grid(row=7, column=0, sticky="e", **pad)
+        tk.Label(win, text="Descuento", bg=BG).grid(row=9, column=0, sticky="e", **pad)
         e_desc = tk.Entry(win, width=18); e_desc.insert(0, "0.00")
-        e_desc.grid(row=7, column=1, sticky="w", **pad)
+        e_desc.grid(row=9, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="ISC", bg=BG).grid(row=8, column=0, sticky="e", **pad)
+        tk.Label(win, text="ISC", bg=BG).grid(row=10, column=0, sticky="e", **pad)
         e_isc = tk.Entry(win, width=18); e_isc.insert(0, "0.00")
-        e_isc.grid(row=8, column=1, sticky="w", **pad)
+        e_isc.grid(row=10, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="IGV", bg=BG).grid(row=9, column=0, sticky="e", **pad)
+        tk.Label(win, text="IGV", bg=BG).grid(row=11, column=0, sticky="e", **pad)
         igv_rate = tk.DoubleVar(value=0.18)
-        tk.Radiobutton(win, text="18 %", variable=igv_rate, value=0.18, bg=BG)\
-            .grid(row=9, column=1, sticky="w", **pad)
-        tk.Radiobutton(win, text="10 %", variable=igv_rate, value=0.10, bg=BG)\
-            .grid(row=9, column=1, sticky="e", **pad)
-
-        tk.Label(win, text="", bg=BG).grid(row=10, column=0)
+        f_igv = tk.Frame(win, bg=BG)
+        f_igv.grid(row=11, column=1, sticky="w", **pad)
+        tk.Radiobutton(f_igv, text="18 %", variable=igv_rate, value=0.18, bg=BG).pack(side="left")
+        tk.Radiobutton(f_igv, text="10 %", variable=igv_rate, value=0.10, bg=BG).pack(side="left", padx=12)
 
         afect_var = tk.StringVar(value="Gravado")
-        tk.Radiobutton(win, text="Gravado",  variable=afect_var, value="Gravado",  bg=BG)\
-            .grid(row=11, column=1, sticky="w", **pad)
-        tk.Radiobutton(win, text="Exonerado", variable=afect_var, value="Exonerado", bg=BG)\
-            .grid(row=11, column=1, sticky="e", **pad)
-        tk.Radiobutton(win, text="Inafecto",  variable=afect_var, value="Inafecto",  bg=BG)\
-            .grid(row=11, column=1, sticky="ne", padx=(140,6), pady=3)
+        tk.Label(win, text="Afectación", bg=BG).grid(row=12, column=0, sticky="e", **pad)
+        f_afect = tk.Frame(win, bg=BG)
+        f_afect.grid(row=12, column=1, sticky="w", **pad)
+        for af in AFECTACIONES:
+            tk.Radiobutton(f_afect, text=af, variable=afect_var, value=af, bg=BG).pack(side="left", padx=4)
 
-        tk.Label(win, text="Impuesto ICBPER", bg=BG).grid(row=12, column=0, sticky="e", **pad)
+        tk.Label(win, text="Impuesto ICBPER", bg=BG).grid(row=13, column=0, sticky="e", **pad)
         e_icbper = tk.Entry(win, width=18, state="readonly")
-        e_icbper.grid(row=12, column=1, sticky="w", **pad)
+        e_icbper.grid(row=13, column=1, sticky="w", **pad)
 
-        tk.Label(win, text="Importe Total del Ítem", bg=BG).grid(row=13, column=0, sticky="e", **pad)
+        tk.Label(win, text="Importe Total del Ítem", bg=BG).grid(row=14, column=0, sticky="e", **pad)
         e_total_item = tk.Entry(win, width=18, state="readonly")
-        e_total_item.grid(row=13, column=1, sticky="w", **pad)
+        e_total_item.grid(row=14, column=1, sticky="w", **pad)
 
         def icbper_tarifa():
             try: cant = float(e_cant.get() or "0")
@@ -295,7 +384,7 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
             vals_row = (bien, afect, unidad, f"{cant:g}", codigo, desc_txt,
                         f"{vu:.2f}", f"{base:.2f}", f"{igv_m:.2f}", f"{isc:.2f}", f"{icb:.2f}", f"{total_i:.2f}")
 
-            if edit:
+            if edit and idx_edit is not None:
                 items[idx_edit] = data
                 iid = tree.get_children()[idx_edit]
                 tree.item(iid, values=vals_row)
@@ -305,10 +394,10 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
 
             win.destroy(); recalcular_totales()
 
-        tk.Button(win, text="✔ Aceptar", width=12, command=aceptar)\
-            .grid(row=15, column=0, pady=8)
-        tk.Button(win, text="✖ Cancelar", width=12, command=win.destroy)\
-            .grid(row=15, column=1, pady=8, sticky="w")
+        btn_frame = tk.Frame(win, bg=BG)
+        btn_frame.grid(row=15, column=0, columnspan=2, pady=8)
+        tk.Button(btn_frame, text="✔ Aceptar", width=12, command=aceptar).pack(side="left", padx=8)
+        tk.Button(btn_frame, text="✖ Cancelar", width=12, command=win.destroy).pack(side="left", padx=8)
 
         recalcular_item(); win.wait_window()
 
@@ -325,13 +414,43 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
     btn_edit.config(command=lambda: abrir_modal_item(True))
     btn_del.config(command=eliminar_sel)
 
+    # ======= GUARDAR FACTURA =======
+    def guardar_factura():
+        if not cliente_actual[0]:
+            messagebox.showwarning("Cliente", "Primero busca/registra un cliente."); return
+        if not items:
+            messagebox.showwarning("Ítems", "Agrega al menos un ítem a la factura."); return
+        fecha = ent_fecha.get().strip()
+        if not fecha:
+            messagebox.showwarning("Fecha", "Ingresa la fecha de emisión."); return
+        try:
+            fac_id = fac_svc.crear(
+                cliente_id=cliente_actual[0],
+                moneda=cb_moneda.get(),
+                fecha_emision=fecha,
+                subtotal=float(subtotal_var.get()),
+                descuentos=float(descuentos_var.get()),
+                valor_venta=float(valor_venta_var.get()),
+                igv=float(igv_var.get()),
+                isc=float(isc_var.get()),
+                icbper=float(icbper_var.get()),
+                otros_cargos=float(otros_cargos_var.get()),
+                total=float(total_var.get()),
+                items=items,
+            )
+            messagebox.showinfo("Factura Guardada",
+                                f"Factura F001-{fac_id:08d} registrada exitosamente.")
+            volver_cb()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar la factura:\n{e}")
+
     # ======= BOTONERA =======
     pie = tk.Frame(frame_contenedor, bg=BG)
     pie.grid(row=2, column=0, sticky="ew", padx=12, pady=(4,12))
     tk.Button(pie, text="◀ Retroceder", font=FUENTE, command=volver_cb)\
         .pack(side="left", padx=6)
-    tk.Button(pie, text="▶ Continuar", font=FUENTE,
-              command=lambda: messagebox.showinfo("Continuar","Vista previa / PDF próximamente"))\
+    tk.Button(pie, text="💾 Guardar Factura", font=FUENTE, bg="#28a745", fg="white",
+              command=guardar_factura)\
         .pack(side="left", padx=6)
     tk.Button(pie, text="✖ Cancelar", font=FUENTE, command=volver_cb)\
         .pack(side="left", padx=6)

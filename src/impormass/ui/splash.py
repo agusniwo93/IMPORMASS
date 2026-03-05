@@ -38,14 +38,15 @@ def run_splash(next_fn, duration_ms: int = 4000):
     progress.place(x=0, y=0)
 
     # ---------- ANIMACIÓN ----------
-    def animar(i=0, w=10):
+    def animar_gif(i=0):
         if frames:
             label_gif.configure(image=frames[i])
-            root.after(100, animar, (i + 1) % len(frames), w)
+            root.after(100, animar_gif, (i + 1) % len(frames))
 
+    def animar_barra(w=10):
         if w <= 400:
             progress.place(width=w)
-            root.after(30, animar, i, w + 10)
+            root.after(30, animar_barra, w + 10)
 
     def continuar():
         try:
@@ -53,6 +54,7 @@ def run_splash(next_fn, duration_ms: int = 4000):
         finally:
             next_fn()        # lanza la siguiente pantalla
 
-    root.after(100, animar)
+    root.after(100, animar_gif)
+    root.after(100, animar_barra)
     root.after(duration_ms, continuar)
     root.mainloop()
