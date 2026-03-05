@@ -6,6 +6,7 @@ from ..utils.ui_helpers import auto_resize_treeview
 from ..services import cliente_service as cli_svc
 from ..services import producto_service as prod_svc
 from ..services import factura_service as fac_svc
+from ..services import config_service as cfg_svc
 
 FUENTE = ("Segoe UI", 10)
 FUENTE_LBL = ("Segoe UI", 10)
@@ -16,15 +17,17 @@ UNIDADES = ["UNIDAD", "UND", "MTR", "KG", "LT", "HORA", "SERV"]
 
 def ventana_facturas_registro(frame_contenedor, volver_cb):
     for w in frame_contenedor.winfo_children(): w.destroy()
+    frame_contenedor.rowconfigure(0, weight=0)
     frame_contenedor.rowconfigure(1, weight=1)
+    frame_contenedor.rowconfigure(2, weight=0)
     frame_contenedor.columnconfigure(0, weight=1)
 
     root = frame_contenedor.winfo_toplevel()
     cliente_actual = [None]  # [id] del cliente seleccionado
 
     # ======= CABECERA =======
-    cabecera = tk.LabelFrame(frame_contenedor, text="Datos del Comprobante", bg=BG, padx=10, pady=10)
-    cabecera.grid(row=0, column=0, sticky="ew", padx=12, pady=(10,8))
+    cabecera = tk.LabelFrame(frame_contenedor, text="Datos del Comprobante", bg=BG, padx=10, pady=6)
+    cabecera.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 4))
     cabecera.columnconfigure(1, weight=1)
     cabecera.columnconfigure(3, weight=0)
 
@@ -105,8 +108,9 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
 
     tk.Label(cabecera, text="Tipo Moneda", font=FUENTE_LBL, bg=BG)\
         .grid(row=3, column=0, sticky="e", padx=(0,8), pady=3)
-    cb_moneda = ttk.Combobox(cabecera, values=["SOLES", "DÓLARES"], state="readonly", width=20)
-    cb_moneda.set("SOLES")
+    moneda_def = cfg_svc.obtener("moneda_defecto") or "SOLES"
+    cb_moneda = ttk.Combobox(cabecera, values=["SOLES", "DOLARES"], state="readonly", width=20)
+    cb_moneda.set(moneda_def)
     cb_moneda.grid(row=3, column=1, sticky="w", pady=3)
 
     tk.Label(cabecera, text="Fecha de Emisión", font=FUENTE_LBL, bg=BG)\
@@ -119,43 +123,41 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
     cuerpo = tk.Frame(frame_contenedor, bg=BG)
     cuerpo.grid(row=1, column=0, sticky="nsew", padx=12)
     cuerpo.rowconfigure(1, weight=1)
+    cuerpo.rowconfigure(2, weight=0)
     cuerpo.columnconfigure(0, weight=1)
 
     # barra acciones
     barra = tk.Frame(cuerpo, bg=BG)
-    barra.grid(row=0, column=0, sticky="w")
-    btn_add = tk.Button(barra, text="➕ Adicionar", font=FUENTE)
-    btn_edit = tk.Button(barra, text="✏️ Editar", font=FUENTE)
-    btn_del = tk.Button(barra, text="🗑 Eliminar", font=FUENTE)
+    barra.grid(row=0, column=0, sticky="ew")
+    btn_add = tk.Button(barra, text="Adicionar", font=FUENTE)
+    btn_edit = tk.Button(barra, text="Editar", font=FUENTE)
+    btn_del = tk.Button(barra, text="Eliminar", font=FUENTE)
     for i, b in enumerate((btn_add, btn_edit, btn_del)):
         b.grid(row=0, column=i, padx=6, pady=2)
 
     # tabla
-    cols = ("Bien/Servicio", "Afectación", "Unidad", "Cantidad", "Código",
-            "Descripción", "Valor Unit.", "Subtotal", "IGV", "ISC", "ICBPER", "Total")
+    cols = ("Bien/Servicio", "Afectacion", "Unidad", "Cantidad", "Codigo",
+            "Descripcion", "Valor Unit.", "Subtotal", "IGV", "ISC", "ICBPER", "Total")
     tabla_wrap = tk.Frame(cuerpo, bg=BG)
-    tabla_wrap.grid(row=1, column=0, sticky="nsew", pady=(4,6))
-    tabla_wrap.rowconfigure(0, weight=1); tabla_wrap.columnconfigure(0, weight=1)
+    tabla_wrap.grid(row=1, column=0, sticky="nsew", pady=(4, 4))
+    tabla_wrap.rowconfigure(0, weight=1)
+    tabla_wrap.columnconfigure(0, weight=1)
 
     tree = ttk.Treeview(tabla_wrap, columns=cols, show="headings")
-    for c in cols: tree.heading(c, text=c)
+    for c in cols:
+        tree.heading(c, text=c)
     tree.grid(row=0, column=0, sticky="nsew")
-    auto_resize_treeview(tree, fractions=[0.10,0.08,0.06,0.06,0.08,0.18,0.08,0.08,0.07,0.06,0.06,0.09])
+    auto_resize_treeview(tree, fractions=[0.09, 0.08, 0.06, 0.06, 0.08, 0.18, 0.08, 0.08, 0.07, 0.06, 0.06, 0.10])
 
     sy = ttk.Scrollbar(tabla_wrap, orient="vertical", command=tree.yview)
-    tree.configure(yscroll=sy.set)
+    sx = ttk.Scrollbar(tabla_wrap, orient="horizontal", command=tree.xview)
+    tree.configure(yscroll=sy.set, xscroll=sx.set)
     sy.grid(row=0, column=1, sticky="ns")
+    sx.grid(row=1, column=0, sticky="ew")
 
-    # panel totales
-    panel_tot = tk.Frame(cuerpo, bg=BG, bd=1, relief="solid")
-    panel_tot.grid(row=0, column=1, rowspan=2, sticky="n", padx=(10,0), pady=(0,6))
-
-    def fila_total(r, texto, var):
-        tk.Label(panel_tot, text=texto, font=FUENTE_LBL, bg=BG)\
-            .grid(row=r, column=0, sticky="e", padx=(6,6), pady=3)
-        tk.Entry(panel_tot, textvariable=var, font=FUENTE, width=16,
-                 state="readonly", justify="right")\
-            .grid(row=r, column=1, sticky="w", padx=(0,6))
+    # panel totales - horizontal debajo de la tabla para mejor responsividad
+    panel_tot = tk.LabelFrame(cuerpo, text="Totales", bg=BG, padx=6, pady=4)
+    panel_tot.grid(row=2, column=0, sticky="ew", pady=(2, 4))
 
     subtotal_var   = tk.StringVar(value="0.00")
     anticipos_var  = tk.StringVar(value="0.00")
@@ -169,21 +171,38 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
     redondeo_var     = tk.StringVar(value="0.00")
     total_var        = tk.StringVar(value="0.00")
 
-    labels = [
-        ("Sub Total Ventas", subtotal_var),
-        ("Anticipos", anticipos_var),
+    # Fila superior de totales
+    labels_row1 = [
+        ("SubTotal", subtotal_var),
         ("Descuentos", descuentos_var),
-        ("Valor de Venta", valor_venta_var),
-        ("ISC", isc_var),
+        ("Valor Venta", valor_venta_var),
         ("IGV", igv_var),
+        ("ISC", isc_var),
         ("ICBPER", icbper_var),
+    ]
+    labels_row2 = [
+        ("Anticipos", anticipos_var),
         ("Otros Cargos", otros_cargos_var),
         ("Otros Tributos", otros_trib_var),
-        ("Monto de Redondeo", redondeo_var),
-        ("Importe Total", total_var),
+        ("Redondeo", redondeo_var),
+        ("TOTAL", total_var),
     ]
-    for i, (t, v) in enumerate(labels):
-        fila_total(i, f"{t} : ", v)
+
+    for col_idx, (texto, var) in enumerate(labels_row1):
+        panel_tot.columnconfigure(col_idx, weight=1)
+        tk.Label(panel_tot, text=texto, font=("Segoe UI", 8), bg=BG)\
+            .grid(row=0, column=col_idx, padx=2, pady=(0, 1))
+        tk.Entry(panel_tot, textvariable=var, font=("Segoe UI", 9),
+                 width=12, state="readonly", justify="right")\
+            .grid(row=1, column=col_idx, padx=2, pady=(0, 2), sticky="ew")
+
+    for col_idx, (texto, var) in enumerate(labels_row2):
+        f = ("Segoe UI", 9, "bold") if texto == "TOTAL" else ("Segoe UI", 8)
+        tk.Label(panel_tot, text=texto, font=f, bg=BG)\
+            .grid(row=2, column=col_idx, padx=2, pady=(2, 1))
+        tk.Entry(panel_tot, textvariable=var, font=("Segoe UI", 9),
+                 width=12, state="readonly", justify="right")\
+            .grid(row=3, column=col_idx, padx=2, pady=(0, 2), sticky="ew")
 
     # ======= lógica totales =======
     items = []
@@ -292,11 +311,14 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
         e_isc = tk.Entry(win, width=18); e_isc.insert(0, "0.00")
         e_isc.grid(row=10, column=1, sticky="w", **pad)
 
+        # IGV - usar tasa de la configuración
+        igv_pct_cfg = float(cfg_svc.obtener("igv_porcentaje") or "18")
+        igv_default = igv_pct_cfg / 100.0
         tk.Label(win, text="IGV", bg=BG).grid(row=11, column=0, sticky="e", **pad)
-        igv_rate = tk.DoubleVar(value=0.18)
+        igv_rate = tk.DoubleVar(value=igv_default)
         f_igv = tk.Frame(win, bg=BG)
         f_igv.grid(row=11, column=1, sticky="w", **pad)
-        tk.Radiobutton(f_igv, text="18 %", variable=igv_rate, value=0.18, bg=BG).pack(side="left")
+        tk.Radiobutton(f_igv, text=f"{igv_pct_cfg:g} %", variable=igv_rate, value=igv_default, bg=BG).pack(side="left")
         tk.Radiobutton(f_igv, text="10 %", variable=igv_rate, value=0.10, bg=BG).pack(side="left", padx=12)
 
         afect_var = tk.StringVar(value="Gravado")
@@ -314,10 +336,11 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
         e_total_item = tk.Entry(win, width=18, state="readonly")
         e_total_item.grid(row=14, column=1, sticky="w", **pad)
 
+        icbper_tarifa_cfg = float(cfg_svc.obtener("icbper_tarifa") or "0.50")
         def icbper_tarifa():
             try: cant = float(e_cant.get() or "0")
             except ValueError: cant = 0
-            return round(0.50 * cant, 2) if icb_si_no.get() == "SI" else 0.0
+            return round(icbper_tarifa_cfg * cant, 2) if icb_si_no.get() == "SI" else 0.0
 
         def recalcular_item(*_):
             try:
@@ -423,8 +446,9 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
         fecha = ent_fecha.get().strip()
         if not fecha:
             messagebox.showwarning("Fecha", "Ingresa la fecha de emisión."); return
+        serie = cfg_svc.obtener("serie_factura") or "F001"
         try:
-            fac_id = fac_svc.crear(
+            _fac_id, num_fac = fac_svc.crear(
                 cliente_id=cliente_actual[0],
                 moneda=cb_moneda.get(),
                 fecha_emision=fecha,
@@ -437,20 +461,25 @@ def ventana_facturas_registro(frame_contenedor, volver_cb):
                 otros_cargos=float(otros_cargos_var.get()),
                 total=float(total_var.get()),
                 items=items,
+                serie=serie,
             )
             messagebox.showinfo("Factura Guardada",
-                                f"Factura F001-{fac_id:08d} registrada exitosamente.")
+                                f"Factura {num_fac} registrada exitosamente.\n"
+                                f"Total: S/. {total_var.get()}")
             volver_cb()
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar la factura:\n{e}")
 
     # ======= BOTONERA =======
     pie = tk.Frame(frame_contenedor, bg=BG)
-    pie.grid(row=2, column=0, sticky="ew", padx=12, pady=(4,12))
-    tk.Button(pie, text="◀ Retroceder", font=FUENTE, command=volver_cb)\
+    pie.grid(row=2, column=0, sticky="ew", padx=12, pady=(4, 8))
+    tk.Button(pie, text="Volver", font=("Segoe UI", 10, "bold"),
+              command=volver_cb, bg="#007acc", fg="white", relief="flat",
+              padx=12, pady=2)\
         .pack(side="left", padx=6)
-    tk.Button(pie, text="💾 Guardar Factura", font=FUENTE, bg="#28a745", fg="white",
+    tk.Button(pie, text="Guardar Factura", font=("Segoe UI", 10, "bold"),
+              bg="#28a745", fg="white", relief="flat", padx=12, pady=2,
               command=guardar_factura)\
         .pack(side="left", padx=6)
-    tk.Button(pie, text="✖ Cancelar", font=FUENTE, command=volver_cb)\
+    tk.Button(pie, text="Cancelar", font=FUENTE, command=volver_cb)\
         .pack(side="left", padx=6)

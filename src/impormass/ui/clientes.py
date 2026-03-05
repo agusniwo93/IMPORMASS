@@ -12,7 +12,12 @@ def vista_clientes(frame, volver_funcion):
     for w in frame.winfo_children():
         w.destroy()
 
+    frame.rowconfigure(0, weight=0)
+    frame.rowconfigure(1, weight=0)
+    frame.rowconfigure(2, weight=0)
     frame.rowconfigure(3, weight=1)
+    frame.rowconfigure(4, weight=0)
+    frame.rowconfigure(5, weight=0)
     frame.columnconfigure(0, weight=1)
 
     tk.Label(frame, text="GESTIÓN DE CLIENTES",
@@ -82,17 +87,20 @@ def vista_clientes(frame, volver_funcion):
     e_buscar.bind("<KeyRelease>", lambda e: cargar(e_buscar.get()))
     cargar()
 
-    # --- Acciones ---
+    # --- Estado de edición ---
+    _editing_id = [None]
+
     def _clean():
         cb_tipo.set("RUC")
         for e in (e_numdoc, e_razon, e_dir, e_tel, e_email):
             e.delete(0, tk.END)
-
-    _editing_id = [None]
+        _editing_id[0] = None
+        lbl_estado.config(text="Modo: Nuevo cliente", fg="#007acc")
 
     def _sel_to_inputs():
         sel = tree.focus()
         if not sel:
+            messagebox.showwarning("Selección", "Selecciona un cliente de la tabla.")
             return
         v = tree.item(sel, "values")
         _clean()
@@ -103,8 +111,12 @@ def vista_clientes(frame, volver_funcion):
         e_dir.insert(0, v[4])
         e_tel.insert(0, v[5])
         e_email.insert(0, v[6])
+        lbl_estado.config(text=f"Editando: {v[3]}", fg="#cc6600")
 
     def guardar():
+        if _editing_id[0]:
+            messagebox.showinfo("Info", "Estás en modo edición. Usa 'Actualizar' o 'Cancelar'.")
+            return
         numdoc = e_numdoc.get().strip()
         razon = e_razon.get().strip()
         if not numdoc or not razon:
@@ -114,7 +126,7 @@ def vista_clientes(frame, volver_funcion):
             svc.crear(cb_tipo.get(), numdoc, razon,
                       e_dir.get().strip(), e_tel.get().strip(), e_email.get().strip())
             _clean()
-            cargar()
+            cargar(e_buscar.get())
             messagebox.showinfo("OK", "Cliente guardado.")
         except Exception:
             messagebox.showerror("Error", "El número de documento ya existe.")
@@ -130,34 +142,43 @@ def vista_clientes(frame, volver_funcion):
             return
         svc.actualizar(_editing_id[0], cb_tipo.get(), numdoc, razon,
                        e_dir.get().strip(), e_tel.get().strip(), e_email.get().strip())
-        _editing_id[0] = None
         _clean()
-        cargar()
+        cargar(e_buscar.get())
         messagebox.showinfo("OK", "Cliente actualizado.")
 
     def eliminar():
         sel = tree.focus()
         if not sel:
-            messagebox.showwarning("Selección", "Elige un cliente.")
+            messagebox.showwarning("Selección", "Elige un cliente de la tabla.")
             return
         cid = int(tree.item(sel, "values")[0])
         nombre = tree.item(sel, "values")[3]
-        if messagebox.askyesno("Confirmar", f"¿Eliminar a {nombre}?"):
+        if messagebox.askyesno("Confirmar", f"¿Eliminar a '{nombre}'?"):
             svc.eliminar(cid)
-            cargar()
+            _clean()
+            cargar(e_buscar.get())
             messagebox.showinfo("OK", "Cliente eliminado.")
 
-    # --- Botones ---
+    # --- Botonera + indicador de estado ---
     acc = tk.Frame(frame, bg=BG)
-    acc.grid(row=4, column=0, pady=(4, 8))
-    for i, (txt, cmd) in enumerate([
+    acc.grid(row=4, column=0, pady=(4, 4))
+
+    lbl_estado = tk.Label(acc, text="Modo: Nuevo cliente",
+                          font=("Segoe UI", 9, "italic"), bg=BG, fg="#007acc")
+    lbl_estado.grid(row=0, column=0, columnspan=5, pady=(0, 4))
+
+    botones = [
         ("✏ Cargar para editar", _sel_to_inputs),
         ("✅ Actualizar", actualizar_cliente),
-        ("🛑 Cancelar edición", lambda: (_clean(), _editing_id.__setitem__(0, None))),
+        ("🛑 Cancelar edición", _clean),
         ("❌ Eliminar", eliminar),
-        ("💾 Guardar Cliente", guardar),
-    ]):
-        tk.Button(acc, text=txt, command=cmd).grid(row=0, column=i, padx=5)
+        ("💾 Guardar Nuevo", guardar),
+    ]
+    for i, (txt, cmd) in enumerate(botones):
+        tk.Button(acc, text=txt, command=cmd, font=("Segoe UI", 9))\
+            .grid(row=1, column=i, padx=4)
 
-    tk.Button(frame, text="⬅ Volver", command=volver_funcion)\
+    tk.Button(frame, text="Volver al Menu Principal", font=("Segoe UI", 11, "bold"),
+              command=volver_funcion, bg="#007acc", fg="white",
+              activebackground="#005f99", relief="flat", padx=16, pady=4)\
         .grid(row=5, column=0, pady=(4, 12))

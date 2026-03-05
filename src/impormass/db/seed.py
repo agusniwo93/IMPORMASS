@@ -4,7 +4,8 @@ DDL = """
 CREATE TABLE IF NOT EXISTS usuarios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario TEXT NOT NULL UNIQUE,
-  clave   TEXT NOT NULL
+  clave   TEXT NOT NULL,
+  rol     TEXT NOT NULL DEFAULT 'vendedor'
 );
 
 CREATE TABLE IF NOT EXISTS productos (
@@ -64,11 +65,47 @@ CREATE TABLE IF NOT EXISTS factura_detalle (
   total REAL NOT NULL,
   FOREIGN KEY (factura_id) REFERENCES facturas(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS configuracion (
+  clave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL DEFAULT ''
+);
 """
+
+
+def _migrate_roles(conn):
+    """Agrega la columna 'rol' a usuarios si no existe (migración)."""
+    cur = conn.execute("PRAGMA table_info(usuarios)")
+    columnas = [row[1] for row in cur.fetchall()]
+    if "rol" not in columnas:
+        conn.execute("ALTER TABLE usuarios ADD COLUMN rol TEXT NOT NULL DEFAULT 'vendedor'")
+
+
+def _ensure_admin(conn):
+    """Crea un usuario admin por defecto si no existe ningún admin."""
+    import hashlib
+    cur = conn.execute("SELECT 1 FROM usuarios WHERE rol='admin' LIMIT 1")
+    if cur.fetchone() is None:
+        hashed = hashlib.sha256("admin1234".encode()).hexdigest()
+        try:
+            conn.execute(
+                "INSERT INTO usuarios (usuario, clave, rol) VALUES (?, ?, ?)",
+                ("admin", hashed, "admin"),
+            )
+        except Exception:
+            # Si el usuario 'admin' ya existe, actualiza su rol y clave
+            conn.execute(
+                "UPDATE usuarios SET rol='admin', clave=? WHERE usuario='admin'",
+                (hashed,)
+            )
+
 
 def init_schema():
     with get_conn() as conn:
         conn.executescript(DDL)
+        _migrate_roles(conn)
+        _ensure_admin(conn)
+
 
 if __name__ == "__main__":
     init_schema()

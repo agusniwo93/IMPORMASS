@@ -13,7 +13,8 @@ def _siguiente_numero(conn, serie: str = "F001") -> int:
 def crear(cliente_id: int, moneda: str, fecha_emision: str,
           subtotal: float, descuentos: float, valor_venta: float,
           igv: float, isc: float, icbper: float, otros_cargos: float,
-          total: float, items: List[Dict], serie: str = "F001") -> int:
+          total: float, items: List[Dict], serie: str = "F001") -> Tuple[int, str]:
+    """Crea factura con detalle. Retorna (factura_id, numero_formateado)."""
     with get_conn() as conn:
         numero = _siguiente_numero(conn, serie)
         cur = conn.execute(
@@ -39,7 +40,8 @@ def crear(cliente_id: int, moneda: str, fecha_emision: str,
                  it.get("igv", 0), it.get("isc", 0), it.get("icbper", 0),
                  it["total"]),
             )
-        return factura_id
+        num_formateado = f"{serie}-{numero:08d}"
+        return factura_id, num_formateado
 
 
 def listar(filtro: str = "") -> List[Tuple]:
